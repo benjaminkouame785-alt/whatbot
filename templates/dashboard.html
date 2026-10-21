@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WA-SHELL // Terminal distant</title>
+<style>
+  :root{--green:#00ff66;--green-dim:#0a7a33;--bg:#020603;--panel:#05120a;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:'Courier New',monospace;color:var(--green);overflow:hidden;}
+  #matrix{position:fixed;inset:0;z-index:0;}
+  .wrap{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh;padding:18px 18px 10px;}
+  header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--green-dim);padding-bottom:8px;margin-bottom:10px;text-shadow:0 0 6px var(--green);}
+  h1{font-size:1.1rem;letter-spacing:3px;margin:0;}
+  .status{font-size:.75rem;color:var(--green-dim);}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 8px var(--green);animation:blink 1.4s infinite;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+  #log{flex:1;overflow-y:auto;background:rgba(5,18,10,.75);border:1px solid var(--green-dim);border-radius:6px;padding:12px;font-size:.85rem;line-height:1.5;backdrop-filter:blur(1px);}
+  .entry{margin-bottom:6px;white-space:pre-wrap;word-break:break-word;opacity:0;animation:appear .25s forwards;}
+  @keyframes appear{to{opacity:1;}}
+  .tag{font-weight:bold;padding:0 6px;border-radius:3px;margin-right:6px;}
+  .tag-in{color:#000;background:var(--green);}
+  .tag-out{color:var(--green);border:1px solid var(--green-dim);}
+  .tag-blocked{color:#000;background:#ff3b3b;}
+  .tag-denied{color:#000;background:#ffb000;}
+  .meta{color:var(--green-dim);font-size:.75rem;margin-right:8px;}
+  footer{margin-top:8px;font-size:.7rem;color:var(--green-dim);display:flex;justify-content:space-between;}
+  #log::-webkit-scrollbar{width:8px;}
+  #log::-webkit-scrollbar-thumb{background:var(--green-dim);border-radius:4px;}
+</style>
+</head>
+<body>
+<canvas id="matrix"></canvas>
+<div class="wrap">
+  <header>
+    <h1>&gt; WA-SHELL_ <span style="opacity:.5;font-size:.7rem;">remote command console</span></h1>
+    <div class="status"><span class="dot"></span>LIVE — en écoute des messages WhatsApp</div>
+  </header>
+  <div id="log">// en attente de commandes...</div>
+  <footer><span>webhook: /webhook</span><span id="clock"></span></footer>
+</div>
+<script>
+const canvas=document.getElementById('matrix');
+const ctx=canvas.getContext('2d');
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+window.addEventListener('resize',resize);resize();
+const chars="アイウエオカキクケコサシスセソ0123456789ABCDEFGHIJKLM$#@&%".split("");
+const fontSize=16;
+let columns=Math.floor(canvas.width/fontSize);
+let drops=new Array(columns).fill(1);
+function drawMatrix(){
+  ctx.fillStyle="rgba(2,6,3,0.08)";ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#00ff66";ctx.font=fontSize+"px monospace";
+  for(let i=0;i<drops.length;i++){
+    const text=chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillText(text,i*fontSize,drops[i]*fontSize);
+    if(drops[i]*fontSize>canvas.height&&Math.random()>0.975)drops[i]=0;
+    drops[i]++;
+  }
+}
+setInterval(drawMatrix,45);
+function tickClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString();}
+setInterval(tickClock,1000);tickClock();
+const logEl=document.getElementById('log');
+let lastCount=0;
+function tagFor(kind){
+  switch(kind){
+    case "in":return '<span class="tag tag-in">IN</span>';
+    case "out":return '<span class="tag tag-out">OUT</span>';
+    case "blocked":return '<span class="tag tag-blocked">BLOCKED</span>';
+    case "denied":return '<span class="tag tag-denied">DENIED</span>';
+    default:return '';
+  }
+}
+async function pollLogs(){
+  try{
+    const res=await fetch('/api/logs');const data=await res.json();
+    if(data.length!==lastCount){
+      lastCount=data.length;
+      logEl.innerHTML=data.slice().reverse().map(e=>(
+        '<div class="entry"><span class="meta">['+escapeHtml(e.time)+'] '+escapeHtml(e.sender)+'</span>'+tagFor(e.kind)+escapeHtml(e.text)+'</div>'
+      )).join("");
+      logEl.scrollTop=logEl.scrollHeight;
+    }
+  }catch(err){}
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+setInterval(pollLogs,1500);pollLogs();
+</script>
+</body>
+</html>
